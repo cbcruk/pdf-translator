@@ -1,6 +1,6 @@
 # pdf-translator
 
-On-device PDF translator for macOS (EN→KO by default, reflow-based). Instead of reproducing the original layout, it restores reading order and pours the translated text into a clean new PDF — the bar is "as readable as Chrome's reader mode." Works fully offline with no API keys. See [PDF-Translator-Spec.md](PDF-Translator-Spec.md) for the design background.
+On-device PDF translator for macOS (EN→KO by default, reflow-based). Instead of reproducing the original layout, it restores reading order and pours the translated text into a clean new PDF — the bar is "as readable as Chrome's reader mode." Works fully offline with no API keys. The original handoff spec is preserved in git history (`PDF-Translator-Spec.md`, initial commit).
 
 ```
 PDF ─ has text layer ─▶ extract (PDFKit: lines + bbox + font)
@@ -38,7 +38,7 @@ node dist/cli.js input.pdf
 
 ## Layout
 
-Two Swift CLIs sit at the Apple framework boundaries (spec §4); the Node orchestrator ([src/cli.ts](src/cli.ts)) drives them in pipeline order. Every arrow between stages is a JSON contract, so any stage can be swapped independently.
+Two Swift CLIs sit at the Apple framework boundaries; the Node orchestrator ([src/cli.ts](src/cli.ts)) drives them in pipeline order. Every arrow between stages is a JSON contract, so any stage can be swapped independently.
 
 | Stage | Module | Role |
 |---|---|---|
@@ -48,25 +48,25 @@ Two Swift CLIs sit at the Apple framework boundaries (spec §4); the Node orches
 | Assemble | [assemble.ts](src/pipeline/assemble.ts) / [assemble.utils.ts](src/pipeline/assemble.utils.ts) | lines → paragraph/heading/table blocks; header/footer & ToC removal, URL rejoining |
 | Enrich tables | [enrich-tables.ts](src/pipeline/enrich-tables.ts) + `pdf-cli structure` (Swift) | attach Vision cell structure to geometry-detected tables (table pages only) |
 | Protect | [protect.ts](src/pipeline/protect.ts) | mask URLs/emails/glossary terms as `⟦U0⟧` tokens; restore after translation |
-| Translate | [apple-translator.ts](src/translator/apple-translator.ts) \| [llm-translator.ts](src/translator/llm-translator.ts) | engine seam ([translator.types.ts](src/translator/translator.types.ts), spec §8): `translate-cli` (Swift) on-device \| Gemini API |
+| Translate | [apple-translator.ts](src/translator/apple-translator.ts) \| [llm-translator.ts](src/translator/llm-translator.ts) | engine seam ([translator.types.ts](src/translator/translator.types.ts)): `translate-cli` (Swift) on-device \| Gemini API |
 | Render | [render.ts](src/pipeline/render.ts) → `pdf-cli render` (Swift) | block-by-block layout, table grids, pagination |
 
 Shell-out plumbing lives in [ingest.ts](src/pipeline/ingest.ts) and [src/utils/](src/utils/).
 
 ## How it works
 
-**Paragraph assembly** — Translation quality comes from paragraph-level context (spec §5-3), so grouping lines into paragraphs correctly is the core job. Using document-wide statistics (median line gap, common left-edge alignments, dominant body font size), paragraphs break on vertical gaps (1.35×), font changes, indentation, and bullet markers. Headers/footers, page numbers, rotated text (arXiv stamps), and ToC dot leaders are stripped before assembly.
+**Paragraph assembly** — Translation quality comes from paragraph-level context, so grouping lines into paragraphs correctly is the core job. Using document-wide statistics (median line gap, common left-edge alignments, dominant body font size), paragraphs break on vertical gaps (1.35×), font changes, indentation, and bullet markers. Headers/footers, page numbers, rotated text (arXiv stamps), and ToC dot leaders are stripped before assembly.
 
 **Tables** — A run of 3+ consecutive lines sharing an x-offset away from the body alignment marks a table's position; Vision `structure` then runs on those pages only to recover cell structure. Only cells containing words are translated, and the renderer draws real grids (borders, automatic column widths, in-cell wrapping). If Vision matching fails, the table degrades gracefully to monospaced text.
 
 **Protected spans** — URLs, emails, bare domains, and glossary terms are swapped for `⟦U0⟧` tokens before translation and restored afterwards (empirically verified that Apple NMT passes the tokens through untouched). URLs split across lines by typesetting (including right after `https:`) are rejoined at line and block boundaries.
 
-**Scanned documents** — Without a text layer, pages are rasterized at 3x and `RecognizeDocumentsRequest` returns pre-grouped paragraphs/titles/tables/lists that map directly to blocks (no line assembly; completes the spec §5-2/§12-4 upgrade).
+**Scanned documents** — Without a text layer, pages are rasterized at 3x and `RecognizeDocumentsRequest` returns pre-grouped paragraphs/titles/tables/lists that map directly to blocks (no line assembly).
 
 ## Design notes (deviations from the spec, with measurements)
 
-- **No SwiftUI hosting needed**: the spec's biggest unknown (§6, TranslationSession's SwiftUI coupling) is resolved by macOS 26.0+'s `init(installedSource:target:)`. The language-pack download UI is still SwiftUI-only, so packs must be preinstalled
-- **OCR via pdf-cli subcommand instead of node-swift in-process binding**: assembly is geometry-based and needs per-line bboxes, which the existing `vision-ocr` module doesn't provide (spec §9). The JSON contract is the seam, so switching back is cheap
+- **No SwiftUI hosting needed**: the design's biggest unknown (TranslationSession's SwiftUI coupling) is resolved by macOS 26.0+'s `init(installedSource:target:)`. The language-pack download UI is still SwiftUI-only, so packs must be preinstalled
+- **OCR via pdf-cli subcommand instead of node-swift in-process binding**: assembly is geometry-based and needs per-line bboxes, which the existing `vision-ocr` module doesn't provide (it returns a flat transcript). The JSON contract is the seam, so switching back is cheap
 - **Parallelism doesn't help**: running 2–3 translate-cli processes concurrently takes exactly as long as one — on-device translation is serialized at the system daemon level. The throughput ceiling is ~1.5s per paragraph; the real fix is `--engine gemini`
 - **Render fonts**: Helvetica Neue with an Apple SD Gothic Neo cascade. Drawing Latin with SD Gothic alone loses doubled letters (`ll` → `l`) on extraction round-trips, and `NSFont.systemFont` embeds private font names that fall back to Times in other viewers
 

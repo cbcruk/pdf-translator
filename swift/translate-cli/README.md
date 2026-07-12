@@ -1,13 +1,13 @@
 # translate-cli
 
-On-device batch translation CLI built on Apple's Translation framework. The Node orchestrator shells out to it (spec §4, §6).
+On-device batch translation CLI built on Apple's Translation framework. The Node orchestrator shells out to it.
 
-## Key finding (resolves spec §12-1)
+## Key finding
 
 **macOS 26.0+ has a non-SwiftUI entry point**: `TranslationSession(installedSource:target:)`
-(`@available(iOS 26.0, macOS 26.0, *)`). The hidden-SwiftUI-view + run-loop hosting the spec assumed in §6 is unnecessary.
+(`@available(iOS 26.0, macOS 26.0, *)`). The hidden-SwiftUI-view + run-loop hosting the original design assumed is unnecessary.
 
-Constraint: as the name says, this initializer only works when the **language packs are already installed**. Presenting the download sheet still requires SwiftUI's `.translationTask`, so when packs are missing the CLI fails with exit 2 and instructions (consistent with spec §7-2's "preinstall for headless use").
+Constraint: as the name says, this initializer only works when the **language packs are already installed**. Presenting the download sheet still requires SwiftUI's `.translationTask`, so when packs are missing the CLI fails with exit 2 and instructions — preinstall the packs for headless use.
 
 ## Usage
 
@@ -25,7 +25,7 @@ echo '["Hello, world."]' | ./.build/debug/translate-cli --source en --target ko
 
 ## Protocol
 
-- **Input**: JSON array of strings on stdin (paragraph-sized — never single lines, spec §8)
+- **Input**: JSON array of strings on stdin (paragraph-sized — never single lines; translation context matters)
 - **Output**: one JSON object per line on stdout, `{"index","sourceText","targetText"}`, in input order
 - **Exit codes**: `0` success · `1` usage/input error · `2` language pack not installed · `3` unsupported pair · `4` translation failure
 - Diagnostics go to stderr only (stdout is NDJSON-only)
