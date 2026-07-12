@@ -1,0 +1,22 @@
+{
+  "name": "pdf-translator",
+  "version": "0.1.0",
+  "private": true,
+  "description": "On-device PDF translator for macOS (extract, translate, reflow)",
+  "type": "module",
+  "bin": {
+    "pdf-translator": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "build:swift": "swift build -c release --package-path swift/translate-cli && swift build -c release --package-path swift/pdf-cli",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "typescript": "^7.0.2"
+  }
+}

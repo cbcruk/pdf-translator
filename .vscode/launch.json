@@ -1,0 +1,24 @@
+{
+  "configurations": [
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:pdf-translator}/swift/pdf-cli",
+      "name": "Debug pdf-cli (swift/pdf-cli)",
+      "target": "pdf-cli",
+      "configuration": "debug",
+      "preLaunchTask": "swift: Build Debug pdf-cli (swift/pdf-cli)"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:pdf-translator}/swift/pdf-cli",
+      "name": "Release pdf-cli (swift/pdf-cli)",
+      "target": "pdf-cli",
+      "configuration": "release",
+      "preLaunchTask": "swift: Build Release pdf-cli (swift/pdf-cli)"
+    }
+  ]
+}
