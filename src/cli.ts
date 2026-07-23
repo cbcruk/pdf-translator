@@ -11,7 +11,7 @@ import { LlmTranslator } from './translator/llm-translator.js'
 import { maskProtectedSpans, restoreProtectedSpans } from './pipeline/protect.js'
 import type { Block } from './pipeline/assemble.types.js'
 import type { Glossary } from './pipeline/protect.types.js'
-import type { Translator } from './translator/translator.types.js'
+import type { TranslationUnit, Translator } from './translator/translator.types.js'
 
 interface CliOptions {
   inputPath: string
@@ -130,6 +130,20 @@ function makeTranslator(options: CliOptions, fromOcr: boolean): Translator {
   return new AppleTranslator()
 }
 
+// 각 블록에 대해, 그 앞에 나온 가장 최근 헤딩 텍스트를 매핑한다. 컨텍스트
+// 배치 번역에서 짧은 본문/헤딩을 소속 섹션과 함께 판단하는 데 쓰인다.
+function sectionByBlock(blocks: readonly Block[]): string[] {
+  const sections: string[] = []
+  let current = ''
+  for (const block of blocks) {
+    sections.push(current)
+    if (block.type === 'heading') {
+      current = block.text
+    }
+  }
+  return sections
+}
+
 function loadGlossary(glossaryPath: string | undefined): Glossary {
   if (glossaryPath === undefined) {
     return {}
@@ -242,13 +256,36 @@ async function main(): Promise<void> {
     ...translatable.map(({ block }) => block.text),
     ...cellRefs.map(({ rows, row, column }) => rows[row]?.[column] ?? ''),
   ]
-  const { masked, tokens } = maskProtectedSpans(texts, options.glossary)
+
+  // gemini는 용어집을 in-prompt 지시문으로 받아 문맥에 맞게 활용하므로 마스킹하지
+  // 않는다. apple(세그먼트 단위 NMT)은 기존대로 토큰 치환으로 용어를 고정한다.
+  const inPromptGlossary = options.engine === 'gemini'
+  const { masked, tokens } = maskProtectedSpans(texts, options.glossary, {
+    maskGlossary: !inPromptGlossary,
+  })
   if (tokens.size > 0) {
-    console.log(`Protected ${tokens.size} span(s) (URLs, emails, glossary terms)`)
+    const kinds = inPromptGlossary ? 'URLs, emails' : 'URLs, emails, glossary terms'
+    console.log(`Protected ${tokens.size} span(s) (${kinds})`)
   }
-  const translated = await translator.translate(masked, {
+
+  const sections = sectionByBlock(blocks)
+  const units: TranslationUnit[] = [
+    ...translatable.map(({ block, index }, position) => ({
+      text: masked[position] ?? block.text,
+      kind: block.type === 'heading' ? ('heading' as const) : ('body' as const),
+      section: sections[index] || undefined,
+      page: block.source?.page,
+    })),
+    ...cellRefs.map((_, offset) => ({
+      text: masked[translatable.length + offset] ?? '',
+      kind: 'cell' as const,
+    })),
+  ]
+
+  const translated = await translator.translate(units, {
     sourceLanguage: options.sourceLanguage,
     targetLanguage: options.targetLanguage,
+    glossary: inPromptGlossary ? options.glossary : undefined,
     onProgress: (completed, total) => {
       console.log(`Translated ${completed}/${total} block(s)`)
     },

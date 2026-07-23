@@ -1,6 +1,6 @@
 import { runProcess } from '../utils/run-process.js'
 import { resolveSwiftBinary } from '../utils/swift-binaries.js'
-import type { TranslationOptions, Translator } from './translator.types.js'
+import type { TranslationOptions, TranslationUnit, Translator } from './translator.types.js'
 
 interface TranslatedLine {
   index: number
@@ -10,14 +10,16 @@ interface TranslatedLine {
 
 const CHUNK_SIZE = 12
 
+// on-device NMT은 세그먼트 단위라 구조 메타데이터를 활용하지 못한다. text만 사용한다.
 export class AppleTranslator implements Translator {
   async translate(
-    paragraphs: readonly string[],
+    units: readonly TranslationUnit[],
     options: TranslationOptions
   ): Promise<string[]> {
-    if (paragraphs.length === 0) {
+    if (units.length === 0) {
       return []
     }
+    const paragraphs = units.map((unit) => unit.text)
 
     const binary = resolveSwiftBinary('translate-cli')
     const args = ['--source', options.sourceLanguage, '--target', options.targetLanguage]

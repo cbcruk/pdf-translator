@@ -4,7 +4,12 @@
 
 pdf-translator에 참고할 만한 부분이 있는지 분석한 기록. 결론부터 —
 **코드/파라미터 레벨에서 이식할 것은 거의 없고, 개념 하나("번역에 문맥을 넣어라")만 유효**하다.
-그 실현 지점은 아직 미검증 상태인 `--engine gemini` 경로다.
+그 실현 지점은 `--engine gemini` 경로다.
+
+> **상태 (2026-07):** 아래 개념 ①·②를 gemini 경로에 구현했다 — 컨텍스트 포함 배치,
+> 페이지 경계 배치 분할, 동시 요청(4), in-prompt glossary, 분할 재시도 fallback.
+> `src/translator/llm-translator.ts`, 테스트 `test/llm-translator.test.mjs` 참고.
+> (라이브 Gemini API 검증은 키가 있어야 가능해 아직 mock transport 테스트만 존재.)
 
 ## 두 프로젝트는 아키텍처 철학이 정반대
 

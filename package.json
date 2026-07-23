@@ -10,7 +10,8 @@
   "scripts": {
     "build": "tsc",
     "build:swift": "swift build -c release --package-path swift/translate-cli && swift build -c release --package-path swift/pdf-cli",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsc && node --test test/*.test.mjs"
   },
   "engines": {
     "node": ">=18"
