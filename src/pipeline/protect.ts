@@ -11,9 +11,16 @@ function tokenFor(index: number): string {
   return `⟦U${index}⟧`
 }
 
+export interface MaskOptions {
+  // false면 glossary 용어를 토큰으로 치환하지 않는다. gemini 경로는 용어집을
+  // in-prompt 지시문으로 넘겨 모델이 문맥에 맞게 활용하도록 하므로 마스킹을 끈다.
+  maskGlossary?: boolean
+}
+
 export function maskProtectedSpans(
   texts: readonly string[],
-  glossary: Glossary = {}
+  glossary: Glossary = {},
+  { maskGlossary = true }: MaskOptions = {}
 ): ProtectedSpans {
   const tokens = new Map<string, string>()
   let counter = 0
@@ -30,10 +37,12 @@ export function maskProtectedSpans(
       return token + trailing
     })
 
-  const glossaryPatterns = Object.entries(glossary).map(([term, replacement]) => ({
-    pattern: new RegExp(`\\b${escapeRegExp(term)}\\b`, 'gi'),
-    replacement,
-  }))
+  const glossaryPatterns = maskGlossary
+    ? Object.entries(glossary).map(([term, replacement]) => ({
+        pattern: new RegExp(`\\b${escapeRegExp(term)}\\b`, 'gi'),
+        replacement,
+      }))
+    : []
 
   const masked = texts.map((text) => {
     let result = mask(text, URL_PATTERN, (span) => span)

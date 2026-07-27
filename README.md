@@ -59,7 +59,9 @@ Shell-out plumbing lives in [ingest.ts](src/pipeline/ingest.ts) and [src/utils/]
 
 **Tables** — A run of 3+ consecutive lines sharing an x-offset away from the body alignment marks a table's position; Vision `structure` then runs on those pages only to recover cell structure. Only cells containing words are translated, and the renderer draws real grids (borders, automatic column widths, in-cell wrapping). If Vision matching fails, the table degrades gracefully to monospaced text.
 
-**Protected spans** — URLs, emails, bare domains, and glossary terms are swapped for `⟦U0⟧` tokens before translation and restored afterwards (empirically verified that Apple NMT passes the tokens through untouched). URLs split across lines by typesetting (including right after `https:`) are rejoined at line and block boundaries.
+**Protected spans** — URLs, emails, and bare domains are swapped for `⟦U0⟧` tokens before translation and restored afterwards (empirically verified that Apple NMT passes the tokens through untouched). URLs split across lines by typesetting (including right after `https:`) are rejoined at line and block boundaries. Glossary terms are masked the same way on the Apple path; on the Gemini path they are passed as prompt instructions instead (see below), so the model can inflect them naturally rather than substituting a fixed string.
+
+**Gemini context batching** — The `--engine gemini` path translates in batches (≤20 units, split on page boundaries) rather than one segment at a time. Each request carries a read-only CONTEXT block — the section heading plus the preceding source paragraphs — so short headings and boundary paragraphs are disambiguated by their surroundings (this is what makes `Abstract → 초록` beat the isolated `Abstract → 추상`). Context is drawn from *source* text, not prior translations, so batches stay independent and run concurrently (4 at a time). The glossary is injected as an instruction (`term → 번역`). Count-mismatch or API failures split the batch in half and retry, falling back to the source string for a single unit that still fails, so a partial failure never sinks the whole document.
 
 **Scanned documents** — Without a text layer, pages are rasterized at 3x and `RecognizeDocumentsRequest` returns pre-grouped paragraphs/titles/tables/lists that map directly to blocks (no line assembly).
 
@@ -67,12 +69,12 @@ Shell-out plumbing lives in [ingest.ts](src/pipeline/ingest.ts) and [src/utils/]
 
 - **No SwiftUI hosting needed**: the design's biggest unknown (TranslationSession's SwiftUI coupling) is resolved by macOS 26.0+'s `init(installedSource:target:)`. The language-pack download UI is still SwiftUI-only, so packs must be preinstalled
 - **OCR via pdf-cli subcommand instead of node-swift in-process binding**: assembly is geometry-based and needs per-line bboxes, which the existing `vision-ocr` module doesn't provide (it returns a flat transcript). The JSON contract is the seam, so switching back is cheap
-- **Parallelism doesn't help**: running 2–3 translate-cli processes concurrently takes exactly as long as one — on-device translation is serialized at the system daemon level. The throughput ceiling is ~1.5s per paragraph; the real fix is `--engine gemini`
+- **Parallelism doesn't help on-device, but it does over the API**: running 2–3 translate-cli processes concurrently takes exactly as long as one — Apple's on-device translation is serialized at the system daemon level (~1.5s per paragraph ceiling). The Gemini path has no such serialization, so it runs batches concurrently — the real throughput fix
 - **Render fonts**: Helvetica Neue with an Apple SD Gothic Neo cascade. Drawing Latin with SD Gothic alone loses doubled letters (`ll` → `l`) on extraction round-trips, and `NSFont.systemFont` embeds private font names that fall back to Times in other viewers
 
 ## Known limitations
 
 - Multi-column (2-column) layouts depend on PDFKit/Vision reading order — not validated
 - Vision cell recognition sometimes merges dense header rows, and tables spanning a page break render as two grids
-- Mistranslation of short headings/cells ("Abstract" → "추상") is a segment-level NMT ceiling — mitigate with `--glossary`, solve with `--engine gemini`
-- `--engine gemini` has not yet been exercised against the live API (requires a key)
+- Mistranslation of short headings/cells ("Abstract" → "추상") is a segment-level NMT ceiling on the Apple path — mitigate with `--glossary`, or switch to `--engine gemini`, whose context batching translates each segment against its section heading and surrounding text
+- `--engine gemini`'s batching, context assembly, and glossary injection are covered by a mocked-transport test, but the path has not yet been exercised against the live Gemini API (requires a key)
