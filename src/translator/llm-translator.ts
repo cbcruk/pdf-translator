@@ -1,35 +1,52 @@
 import type { Glossary } from '../pipeline/protect.types.js'
 import type { TranslationOptions, TranslationUnit, Translator } from './translator.types.js'
 
+/** 기본 Gemini 모델. */
 const DEFAULT_MODEL = 'gemini-flash-latest'
-const MAX_BATCH = 20 // 한 요청에 담는 번역 단위 수
-const CONCURRENCY = 4 // 동시 요청 수 (on-device와 달리 API는 병렬이 유효)
-const CONTEXT_UNITS = 2 // 배치 앞에 참고용으로 붙이는 직전 소스 단위 수
+/** 한 요청에 담는 최대 번역 단위 수. */
+const MAX_BATCH = 20
+/** 동시 요청 수. on-device와 달리 API는 병렬이 유효하므로 처리량을 위해 여러 배치를 겹쳐 보낸다. */
+const CONCURRENCY = 4
+/** 배치 앞에 참고용으로 붙이는 직전 소스 단위 수. */
+const CONTEXT_UNITS = 2
+/** Gemini generateContent 엔드포인트 베이스. */
 const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models'
 
 export interface LlmTranslatorConfig {
   apiKey: string
+  /** 모델 이름 (기본 {@link DEFAULT_MODEL}). */
   model?: string
+  /** 원문이 OCR에서 왔는지. true면 문자 인식 오류를 감안하라는 지시를 프롬프트에 넣는다. */
   fromOcr?: boolean
 }
 
+/** Gemini API 응답에서 우리가 참조하는 부분만 추린 형태. */
 interface GeminiResponse {
   candidates?: Array<{
     content?: { parts?: Array<{ text?: string }> }
   }>
 }
 
-// 전역 units 배열에 대한 연속 구간. 컨텍스트는 이 구간 앞의 소스 텍스트에서
-// 뽑으므로 배치끼리 의존성이 없고, 그래서 동시 실행이 안전하다.
+/**
+ * 전역 units 배열에 대한 연속 구간(글로벌 인덱스 목록). 컨텍스트는 이 구간 앞의 소스
+ * 텍스트에서 뽑으므로 배치끼리 의존성이 없고, 그래서 동시 실행이 안전하다.
+ */
 interface Batch {
   indices: number[]
 }
 
+/** 배치에 함께 실어 보내는 읽기전용 컨텍스트: 섹션 헤딩과 직전 소스 문단들. */
 interface BatchContext {
   section?: string
   before: string[]
 }
 
+/**
+ * Gemini 번역 엔진. Baidu Unlimited-OCR의 "long-horizon" 아이디어를 좇아 각 요청에 문서
+ * 컨텍스트를 실어 보낸다. 페이지 경계·크기 상한으로 배치를 나누고, 컨텍스트를 소스 텍스트에서
+ * 뽑아 배치 독립성을 유지하며 {@link CONCURRENCY}개씩 동시 요청한다. 실패 시 배치를 반으로
+ * 쪼개 재시도하고, 용어집은 in-prompt 지시문으로 주입한다.
+ */
 export class LlmTranslator implements Translator {
   private readonly apiKey: string
   private readonly model: string
@@ -41,6 +58,12 @@ export class LlmTranslator implements Translator {
     this.fromOcr = config.fromOcr ?? false
   }
 
+  /**
+   * 단위들을 배치로 나눠 동시에 번역하고, 글로벌 인덱스에 맞춰 결과를 제자리에 채운다.
+   * 어떤 자리든 번역이 비면 원문 text로 메워 길이·순서를 보존한다.
+   *
+   * @returns units와 같은 길이·순서의 번역문 배열
+   */
   async translate(
     units: readonly TranslationUnit[],
     options: TranslationOptions
@@ -65,8 +88,12 @@ export class LlmTranslator implements Translator {
     return results.map((value, index) => value ?? units[index]?.text ?? '')
   }
 
-  // 실패(개수 불일치·API 오류) 시 배치를 반으로 쪼개 재시도하고, 끝내
-  // 단일 단위도 실패하면 원문을 그대로 둔다 — 부분 실패가 전체를 죽이지 않게.
+  /**
+   * 배치 하나를 번역한다. 실패(개수 불일치·API 오류) 시 배치를 반으로 쪼개 재시도하고,
+   * 끝내 단일 단위도 실패하면 원문을 그대로 둔다 — 부분 실패가 전체를 죽이지 않게.
+   *
+   * @returns batch.indices와 같은 순서의 번역문 배열
+   */
   private async translateBatch(
     batch: Batch,
     units: readonly TranslationUnit[],
@@ -90,6 +117,11 @@ export class LlmTranslator implements Translator {
     }
   }
 
+  /**
+   * 한 배치를 Gemini에 실제로 요청하고 번역 배열을 파싱해 돌려준다.
+   *
+   * @throws HTTP 오류, 후보 없음, 또는 개수가 입력과 다르면 던진다 (호출부의 split 재시도 트리거)
+   */
   private async request(
     items: readonly string[],
     context: BatchContext,
@@ -129,6 +161,11 @@ export class LlmTranslator implements Translator {
     return parsed.map((item, index) => (typeof item === 'string' ? item : (items[index] ?? '')))
   }
 
+  /**
+   * 한 배치의 프롬프트를 조립한다. 번역 규칙 + (있으면) 용어집 지시문 + CONTEXT 블록(번역
+   * 금지, 참고용) + TRANSLATE 배열 순으로 구성하며, 모델은 TRANSLATE와 같은 길이의 JSON
+   * 문자열 배열만 돌려주도록 지시한다.
+   */
   private buildPrompt(
     items: readonly string[],
     context: BatchContext,
@@ -161,8 +198,10 @@ export class LlmTranslator implements Translator {
   }
 }
 
-// 페이지 경계와 크기 상한에서 배치를 자른다. 헤딩은 별도로 떼지 않고
-// 뒤 본문과 같은 배치에 두어 짧은 헤딩이 문맥과 함께 판단되도록 한다.
+/**
+ * 단위들을 배치로 나눈다. 페이지 경계와 크기 상한({@link MAX_BATCH})에서 자르며, 헤딩은
+ * 별도로 떼지 않고 뒤 본문과 같은 배치에 두어 짧은 헤딩이 문맥과 함께 판단되도록 한다.
+ */
 function planBatches(units: readonly TranslationUnit[]): Batch[] {
   const batches: Batch[] = []
   let current: number[] = []
@@ -193,6 +232,10 @@ function planBatches(units: readonly TranslationUnit[]): Batch[] {
   return batches
 }
 
+/**
+ * 배치의 컨텍스트를 구성한다. 배치 첫 단위의 섹션 헤딩과, 그 앞 {@link CONTEXT_UNITS}개
+ * 단위의 소스 텍스트를 모은다. 전역 units에서 뽑으므로 다른 배치의 번역 결과에 의존하지 않는다.
+ */
 function contextFor(units: readonly TranslationUnit[], batch: Batch): BatchContext {
   const first = batch.indices[0] ?? 0
   const before: string[] = []
@@ -205,6 +248,7 @@ function contextFor(units: readonly TranslationUnit[], batch: Batch): BatchConte
   return { section: units[first]?.section, before }
 }
 
+/** 컨텍스트를 프롬프트에 넣을 문자열로 렌더한다. 실을 내용이 없으면 undefined. */
 function contextLines(context: BatchContext): string | undefined {
   const parts: string[] = []
   if (context.section !== undefined && context.section.length > 0) {
@@ -216,6 +260,7 @@ function contextLines(context: BatchContext): string | undefined {
   return parts.length > 0 ? parts.join('\n') : undefined
 }
 
+/** 용어집을 `- 원문 → 번역` 목록의 프롬프트 지시문으로 만든다. 비어 있으면 undefined. */
 function glossaryBlock(glossary: Glossary | undefined): string | undefined {
   if (glossary === undefined) {
     return undefined
@@ -230,8 +275,10 @@ function glossaryBlock(glossary: Glossary | undefined): string | undefined {
   )
 }
 
-// responseMimeType으로 순수 JSON을 받지만, 모델이 코드펜스로 감싸는
-// 경우를 대비해 벗겨낸 뒤 파싱한다.
+/**
+ * 모델 응답을 JSON으로 파싱한다. responseMimeType으로 순수 JSON을 받지만, 모델이 코드펜스로
+ * 감싸는 경우를 대비해 ```json 펜스를 벗겨낸 뒤 파싱한다.
+ */
 function parseJsonArray(text: string): unknown {
   let trimmed = text.trim()
   if (trimmed.startsWith('```')) {
@@ -243,7 +290,10 @@ function parseJsonArray(text: string): unknown {
   return JSON.parse(trimmed)
 }
 
-// 동시 실행 개수를 limit으로 제한하는 작업 풀.
+/**
+ * 동시 실행 개수를 limit으로 제한하는 작업 풀. limit개의 러너가 공유 커서에서 다음 인덱스를
+ * 집어 처리하며, 모든 작업이 끝나면 resolve된다.
+ */
 async function mapPool<T>(
   items: readonly T[],
   limit: number,

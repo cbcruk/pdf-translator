@@ -13,6 +13,7 @@ import type { Block } from './pipeline/assemble.types.js'
 import type { Glossary } from './pipeline/protect.types.js'
 import type { TranslationUnit, Translator } from './translator/translator.types.js'
 
+/** 파싱이 끝난 CLI 옵션. 파이프라인 전체가 이 하나를 참조한다. */
 interface CliOptions {
   inputPath: string
   outputPath: string
@@ -23,11 +24,13 @@ interface CliOptions {
   engine: 'apple' | 'gemini'
 }
 
+/** `--pages`로 지정한 1-based 페이지 범위(양끝 포함). */
 interface PageRange {
   first: number
   last: number
 }
 
+/** `--pages` 값(`N` 또는 `N-M`)을 파싱한다. 형식이 틀리면 오류를 출력하고 종료한다. */
 function parsePageRange(value: string | undefined): PageRange {
   const match = value?.match(/^(\d+)(?:-(\d+))?$/)
   if (match === null || match === undefined || match[1] === undefined) {
@@ -43,6 +46,7 @@ function parsePageRange(value: string | undefined): PageRange {
   return { first, last }
 }
 
+/** 명령줄 인자를 {@link CliOptions}로 파싱한다. `--help`나 잘못된 인자는 사용법을 찍고 종료한다. */
 function parseArgs(argv: readonly string[]): CliOptions {
   let inputPath: string | undefined
   let outputPath: string | undefined
@@ -117,6 +121,11 @@ function parseArgs(argv: readonly string[]): CliOptions {
   }
 }
 
+/**
+ * 엔진 옵션에 맞는 번역기를 만든다. gemini는 `GEMINI_API_KEY`가 있어야 하며 없으면 종료한다.
+ *
+ * @param fromOcr 원문이 스캔 경로(OCR)에서 왔는지 — gemini 프롬프트의 OCR 감안 지시에 쓰인다
+ */
 function makeTranslator(options: CliOptions, fromOcr: boolean): Translator {
   if (options.engine === 'gemini') {
     const apiKey = process.env['GEMINI_API_KEY']
@@ -144,6 +153,7 @@ function sectionByBlock(blocks: readonly Block[]): string[] {
   return sections
 }
 
+/** `--glossary`가 가리키는 JSON 파일을 읽어 용어집으로 로드한다. 경로가 없으면 빈 용어집. */
 function loadGlossary(glossaryPath: string | undefined): Glossary {
   if (glossaryPath === undefined) {
     return {}
@@ -158,11 +168,17 @@ function loadGlossary(glossaryPath: string | undefined): Glossary {
   }
 }
 
+/** {@link buildBlocks} 결과. usedOcr는 스캔 경로를 탔는지 나타내며 번역기 선택에 쓰인다. */
 interface BuildBlocksResult {
   blocks: Block[]
   usedOcr: boolean
 }
 
+/**
+ * 입력 PDF를 블록 배열로 만든다. 텍스트 레이어가 있으면 PDFKit 추출 → 기하 조립 → (표가
+ * 있으면) Vision 셀 구조 결합의 경로를, 없으면 Vision 문서 구조 인식(스캔 경로)을 탄다.
+ * `--pages` 범위가 있으면 조립 대상만 자르되 통계는 문서 전체를 쓴다.
+ */
 async function buildBlocks(options: CliOptions, ocrLanguages: string[]): Promise<BuildBlocksResult> {
   const info = await readPdfInfo(options.inputPath)
 
@@ -199,15 +215,18 @@ async function buildBlocks(options: CliOptions, ocrLanguages: string[]): Promise
   return { blocks: blocksFromStructure(structuredPages), usedOcr: true }
 }
 
+/** CLI 짧은 언어 코드 → Vision/OCR용 BCP-47 로케일 매핑. */
 const VISION_LANGUAGES: Record<string, string> = {
   en: 'en-US',
   ko: 'ko-KR',
 }
 
+/** 짧은 언어 코드를 Vision 로케일로 바꾼다. 매핑에 없으면 입력을 그대로 돌려준다. */
 function toVisionLanguage(language: string): string {
   return VISION_LANGUAGES[language] ?? language
 }
 
+/** 사용법 한 줄을 stdout에 찍는다. */
 function printUsage(): void {
   console.log(
     `usage: pdf-translator <input.pdf> [-o output.pdf] [--source en] [--target ko] ` +
@@ -215,6 +234,10 @@ function printUsage(): void {
   )
 }
 
+/**
+ * 파이프라인 진입점: 인자 파싱 → 블록 생성(추출/스캔) → 보호 구간 마스킹 → 번역 →
+ * 복원 → 렌더까지 스테이지를 순서대로 구동한다.
+ */
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2))
 

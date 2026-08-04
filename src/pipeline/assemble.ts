@@ -11,23 +11,47 @@ import {
   removeFurniture,
 } from './assemble.utils.js'
 
+/** 본문 크기 대비 이 배수 이상이면 헤딩 후보. */
 const HEADING_SCALE = 1.15
+/** 큰 폰트 헤딩으로 인정하는 최대 글자 수 (그 이상은 본문 문장으로 본다). */
 const HEADING_MAX_LENGTH = 150
+/** 볼드만으로 헤딩 판정할 때의 최대 글자 수 (더 보수적). */
 const BOLD_HEADING_MAX_LENGTH = 80
+/** 본문에서 줄 간격이 중앙값의 이 배수를 넘으면 문단을 나눈다. */
 const PARAGRAPH_GAP_RATIO = 1.35
+/** 헤딩은 아래 여백이 넓으므로 문단보다 큰 배수를 적용해 과분할을 막는다. */
 const HEADING_MERGE_GAP_RATIO = 1.7
+/** 폰트 크기가 이보다 크게 바뀌면 다른 블록으로 본다 (pt). */
 const FONT_SIZE_TOLERANCE = 0.6
+/** 새 문단으로 볼 들여쓰기 최소 폭 (pt). */
 const INDENT_THRESHOLD = 6
+/** 글머리표·번호 매김 목록 마커. 만나면 새 블록을 시작한다. */
 const BULLET_PATTERN = /^\s*([•◦▪‣·*–—-]|\d{1,2}[.)])\s+/
+/** 표로 인정하는 최소 연속 줄 수 (정렬선에서 벗어난 x를 공유하는 줄의 런). */
 const TABLE_MIN_RUN = 3
+/** 표 런이 같은 열로 이어진다고 볼 x 허용 오차 (pt). */
 const TABLE_X_TOLERANCE = 2
+/** 표 런이 끊기지 않고 이어진다고 볼 세로 간격 상한 (줄 간격의 배수). */
 const TABLE_GAP_RATIO = 1.8
 
+/** 조립 과정에서만 쓰는 확장 줄: 원본 줄 + 소속 페이지 + 표 여부. */
 interface PositionedLine extends ExtractedLine {
   pageIndex: number
   isTable: boolean
 }
 
+/**
+ * 추출된 줄들을 문단/헤딩/표 블록으로 조립한다. 파이프라인의 핵심 — 번역 품질은
+ * 문단 단위 문맥에서 나오므로 줄을 문단으로 올바로 묶는 것이 관건이다. 문서 전체 통계
+ * (줄 간격 중앙값·흔한 정렬선·본문 폰트 크기)를 기준으로 세로 간격·폰트 변화·들여쓰기·
+ * 글머리표에서 문단을 나눈다.
+ *
+ * @param pages 조립 대상 페이지들 (`--pages`로 범위를 자를 수 있음)
+ * @param statisticsContext 통계 산출용 페이지들. 범위를 잘라 조립하더라도 정렬선·본문 크기·
+ *   줄 간격은 문서 전체 기준이어야 하므로 별도로 넘긴다 (좁은 범위에선 표 들여쓰기가 다수처럼
+ *   보인다). 생략 시 `pages`로 통계를 낸다.
+ * @returns 읽기 순서의 블록 배열 (줄 걸쳐 끊긴 URL은 블록 경계에서 재결합됨)
+ */
 export function assembleBlocks(
   pages: readonly ExtractedPage[],
   statisticsContext?: readonly ExtractedPage[]
@@ -64,6 +88,7 @@ export function assembleBlocks(
   let tableSource: Block['source']
   let previous: PositionedLine | undefined
 
+  // 누적 중인 표 행과 문단 버퍼를 각각 블록으로 확정하고 비운다.
   const flush = (): void => {
     if (tableRows.length > 0) {
       blocks.push({ type: 'table', text: tableRows.join('\n'), source: tableSource })
@@ -118,6 +143,13 @@ export function assembleBlocks(
   return mergeSplitUrls(blocks)
 }
 
+/**
+ * 각 줄이 표(또는 코드 블록)에 속하는지 표시한다. 본문 정렬선에서 벗어난 x를 같은 열로
+ * 유지하며 세로로 이어지는 줄이 {@link TABLE_MIN_RUN}개 이상 연속될 때만 그 런을 표로 확정한다.
+ * 글머리표로 시작하는 줄은 목록이므로 표에서 제외한다.
+ *
+ * @returns lines와 같은 길이의 boolean 배열 (표 줄이면 true)
+ */
 function markTableLines(
   lines: readonly ExtractedLine[],
   edges: readonly number[],
@@ -159,6 +191,10 @@ function markTableLines(
   return flags
 }
 
+/**
+ * 한 줄이 헤딩인지 판정한다. 본문보다 뚜렷이 큰 폰트(길이 제한 하)거나, 볼드이면서
+ * 본문 이상 크기의 짧고 문장부호로 끝나지 않는 줄이면 헤딩으로 본다.
+ */
 function isHeading(line: PositionedLine, bodySize: number): boolean {
   const text = line.text.trim()
   if (line.fontSize >= bodySize * HEADING_SCALE) {
@@ -172,6 +208,13 @@ function isHeading(line: PositionedLine, bodySize: number): boolean {
   )
 }
 
+/**
+ * 현재 줄이 누적 중인 버퍼와 끊겨 새 블록을 시작해야 하는지 판정한다. 글머리표·폰트 변화·
+ * 넓은 세로 간격·문장 종결 후의 들여쓰기를 경계 신호로 보되, URL 도중이면 절대 끊지 않는다.
+ * 페이지가 바뀌거나 줄이 겹칠 때는 문장이 끝났는지로 판단한다.
+ *
+ * @param heading 현재 줄이 헤딩인지 — 헤딩엔 더 큰 간격 배수를 적용한다
+ */
 function startsNewBlock(
   previous: PositionedLine,
   line: PositionedLine,
@@ -205,8 +248,11 @@ function startsNewBlock(
   return false
 }
 
-// 문단 간격 신호가 긴 URL 한가운데를 자르면 뒷조각이 프로토콜 없이 시작해
-// 마스킹·복원을 모두 비껴가므로, 블록 경계에서 다시 붙인다.
+/**
+ * 블록 경계에서 끊긴 URL을 다시 붙인다. 문단 간격 신호가 긴 URL 한가운데를 자르면 뒷조각이
+ * 프로토콜 없이 시작해 마스킹·복원을 모두 비껴가므로, 앞 블록이 URL 도중에 끝나고 뒤 블록이
+ * URL 잔여부로 시작하면 하나로 합친다.
+ */
 function mergeSplitUrls(blocks: Block[]): Block[] {
   const merged: Block[] = []
   for (const block of blocks) {
