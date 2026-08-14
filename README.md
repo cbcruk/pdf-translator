@@ -35,6 +35,7 @@ node dist/cli.js input.pdf
 | `--pages N[-M]` | Translate only the given pages (useful for long documents at ~1.5s per paragraph) |
 | `--glossary terms.json` | Pin terminology: `{"sub-threshold": "서브 임계"}` — consistent terms across the document |
 | `--engine apple\|gemini` | Translation engine. `gemini` requires the `GEMINI_API_KEY` env var (default: `apple`, on-device) |
+| `--extractor apple\|pdfjs` | Text-layer extraction backend. `pdfjs` uses unpdf (PDF.js), a cross-platform alternative to the Swift/PDFKit path — no bold detection (see design notes). Default: `apple` |
 
 ## Layout
 
@@ -43,7 +44,7 @@ Two Swift CLIs sit at the Apple framework boundaries; the Node orchestrator ([sr
 | Stage | Module | Role |
 |---|---|---|
 | Detect | `pdf-cli info` (Swift) | does a text layer exist? |
-| Extract | `pdf-cli extract` (Swift) | per-line text + bbox + font size/bold |
+| Extract | `pdf-cli extract` (Swift) — or [extract-pdfjs.ts](src/pipeline/extract-pdfjs.ts) via `--extractor pdfjs` | per-line text + bbox + font size/bold |
 | — scanned path | `pdf-cli structure` (Swift) + [structure-blocks.ts](src/pipeline/structure-blocks.ts) | `RecognizeDocumentsRequest` paragraphs/titles/tables/lists → blocks directly |
 | Assemble | [assemble.ts](src/pipeline/assemble.ts) / [assemble.utils.ts](src/pipeline/assemble.utils.ts) | lines → paragraph/heading/table blocks; header/footer & ToC removal, URL rejoining |
 | Enrich tables | [enrich-tables.ts](src/pipeline/enrich-tables.ts) + `pdf-cli structure` (Swift) | attach Vision cell structure to geometry-detected tables (table pages only) |
@@ -71,6 +72,7 @@ Shell-out plumbing lives in [ingest.ts](src/pipeline/ingest.ts) and [src/utils/]
 - **OCR via pdf-cli subcommand instead of node-swift in-process binding**: assembly is geometry-based and needs per-line bboxes, which the existing `vision-ocr` module doesn't provide (it returns a flat transcript). The JSON contract is the seam, so switching back is cheap
 - **Parallelism doesn't help on-device, but it does over the API**: running 2–3 translate-cli processes concurrently takes exactly as long as one — Apple's on-device translation is serialized at the system daemon level (~1.5s per paragraph ceiling). The Gemini path has no such serialization, so it runs batches concurrently — the real throughput fix
 - **Render fonts**: Helvetica Neue with an Apple SD Gothic Neo cascade. Drawing Latin with SD Gothic alone loses doubled letters (`ll` → `l`) on extraction round-trips, and `NSFont.systemFont` embeds private font names that fall back to Times in other viewers
+- **`--extractor pdfjs` (unpdf) as a cross-platform spike**: PDF.js emits text *items* (runs), not lines, so [extract-pdfjs.ts](src/pipeline/extract-pdfjs.ts) regroups them into lines by `hasEOL` + baseline jumps — work PDFKit does for free. It shares the same bottom-left coordinate system, so the `ExtractedLine` contract is a drop-in seam. Verified end-to-end on Linux (extract → assemble → blocks) with no Swift. The catch: unpdf exposes only a generic `fontFamily` (`"sans-serif"`), so `bold` is always false — size-based heading detection survives, bold-only headings don't. Kept behind a flag, not the default, because structure (Vision) and render (Core Graphics) still pin the tool to macOS. See [docs/unpdf-notes.md](docs/unpdf-notes.md)
 
 ## Known limitations
 
