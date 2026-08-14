@@ -21,8 +21,10 @@
     "typescript": "^7.0.2"
   },
   "dependencies": {
+    "@napi-rs/canvas": "^1.0.6",
     "@pdf-lib/fontkit": "^1.1.1",
     "pdf-lib": "^1.17.1",
+    "tesseract.js": "^7.0.0",
     "unpdf": "^1.8.1"
   }
 }
