@@ -4,6 +4,7 @@ import path from 'node:path'
 import { assembleBlocks } from './pipeline/assemble.js'
 import { attachTableStructure, tablePageIndices } from './pipeline/enrich-tables.js'
 import { extractPdf, readPdfInfo, readStructure } from './pipeline/ingest.js'
+import { extractPdfWithPdfjs } from './pipeline/extract-pdfjs.js'
 import { renderPdf } from './pipeline/render.js'
 import { blocksFromStructure } from './pipeline/structure-blocks.js'
 import { AppleTranslator } from './translator/apple-translator.js'
@@ -22,6 +23,7 @@ interface CliOptions {
   pageRange?: PageRange
   glossary: Glossary
   engine: 'apple' | 'gemini'
+  extractor: 'apple' | 'pdfjs'
 }
 
 /** `--pages`로 지정한 1-based 페이지 범위(양끝 포함). */
@@ -55,6 +57,7 @@ function parseArgs(argv: readonly string[]): CliOptions {
   let pageRange: PageRange | undefined
   let glossaryPath: string | undefined
   let engine = 'apple'
+  let extractor = 'apple'
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
@@ -71,6 +74,9 @@ function parseArgs(argv: readonly string[]): CliOptions {
         break
       case '--engine':
         engine = argv[++i] ?? engine
+        break
+      case '--extractor':
+        extractor = argv[++i] ?? extractor
         break
       case '--source':
         sourceLanguage = argv[++i] ?? sourceLanguage
@@ -110,6 +116,11 @@ function parseArgs(argv: readonly string[]): CliOptions {
     process.exit(1)
   }
 
+  if (extractor !== 'apple' && extractor !== 'pdfjs') {
+    console.error(`unknown extractor: ${extractor} (expected apple or pdfjs)`)
+    process.exit(1)
+  }
+
   return {
     inputPath,
     outputPath: resolvedOutput,
@@ -118,6 +129,7 @@ function parseArgs(argv: readonly string[]): CliOptions {
     pageRange,
     glossary: loadGlossary(glossaryPath),
     engine,
+    extractor,
   }
 }
 
@@ -183,8 +195,14 @@ async function buildBlocks(options: CliOptions, ocrLanguages: string[]): Promise
   const info = await readPdfInfo(options.inputPath)
 
   if (info.hasTextLayer) {
-    const ingested = await extractPdf(options.inputPath)
-    console.log(`Extracted ${ingested.pageCount} page(s)`)
+    const ingested =
+      options.extractor === 'pdfjs'
+        ? await extractPdfWithPdfjs(options.inputPath)
+        : await extractPdf(options.inputPath)
+    console.log(
+      `Extracted ${ingested.pageCount} page(s)` +
+        (options.extractor === 'pdfjs' ? ' via unpdf (PDF.js)' : '')
+    )
     let pages = ingested.pages
     if (options.pageRange !== undefined) {
       pages = pages.slice(options.pageRange.first - 1, options.pageRange.last)
@@ -230,7 +248,7 @@ function toVisionLanguage(language: string): string {
 function printUsage(): void {
   console.log(
     `usage: pdf-translator <input.pdf> [-o output.pdf] [--source en] [--target ko] ` +
-      `[--pages N[-M]] [--glossary terms.json] [--engine apple|gemini]`
+      `[--pages N[-M]] [--glossary terms.json] [--engine apple|gemini] [--extractor apple|pdfjs]`
   )
 }
 
