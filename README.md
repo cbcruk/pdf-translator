@@ -41,6 +41,48 @@ node dist/cli.js input.pdf
 | `--ocr vision\|tesseract` | Scanned-document recognizer. `tesseract` uses tesseract.js, a cross-platform alternative to the Swift/Vision path — needs local traineddata via `--tessdata`, no table structure (see design notes). Default: `vision` |
 | `--tessdata <dir>` | Directory of `<lang>.traineddata` for `--ocr tesseract`. Also read from `PDF_TRANSLATOR_TESSDATA`. e.g. `eng.traineddata`, `kor.traineddata` |
 
+## Cross-platform path (no macOS)
+
+The default pipeline uses Apple frameworks (PDFKit, Vision, TranslationSession, Core Graphics) and needs macOS 26.0+. Each of those stages also has a pure-JS backend, so the four flags below let the tool run on Linux, Windows, or serverless — no Swift toolchain, no `pnpm build:swift`.
+
+```sh
+pnpm install
+pnpm build          # TypeScript → dist/  (skip pnpm build:swift)
+```
+
+**Text-layer PDF** (has selectable text) — extract with PDF.js (`pdfjs`), translate with Gemini, render with pdf-lib (`js`):
+
+```sh
+export GEMINI_API_KEY=...
+node dist/cli.js input.pdf \
+  --extractor pdfjs \
+  --engine gemini \
+  --renderer js \
+  --font NotoSansKR-Regular.otf
+```
+
+**Scanned PDF** (image-only, no text layer) — add tesseract.js OCR (`--ocr tesseract`) with a traineddata directory:
+
+```sh
+export GEMINI_API_KEY=...
+node dist/cli.js scanned.pdf \
+  --engine gemini \
+  --renderer js \
+  --font NotoSansKR-Regular.otf \
+  --ocr tesseract \
+  --tessdata ./tessdata
+```
+
+Prerequisites you supply once (the tool ships none of these, to stay offline and keep the repo light):
+
+- **`GEMINI_API_KEY`** — the only online piece; the Apple engine is on-device but macOS-only.
+- **A CJK font** for `--font` — a fontkit-embeddable single-file `.otf`/`.ttf` such as [Noto Sans KR](https://fonts.google.com/noto/specimen/Noto+Sans+KR). `.ttc` collections don't embed. Without it, `--renderer js` falls back to Helvetica and errors on Korean.
+- **traineddata** for `--tessdata` — `<lang>.traineddata` files (e.g. from [tessdata_fast](https://github.com/tesseract-ocr/tessdata_fast)); `en`/`ko` map to `eng`/`kor`.
+
+Flags are independent — mix cross-platform and Apple backends freely (e.g. `--extractor pdfjs` alone on macOS). Any stage you don't override keeps its Swift/Apple default.
+
+Verification status: the extract (`pdfjs`) and render (`js`) backends are measured end-to-end on Linux; the Gemini engine and tesseract OCR are wired and unit-tested but their live API / live OCR passes were not exercised in the build environment (org egress policy blocks the key and traineddata download). Details and limits per backend live in [docs/](docs/) — `unpdf-notes.md`, `js-renderer-notes.md`, `tesseract-ocr-notes.md`.
+
 ## Layout
 
 Two Swift CLIs sit at the Apple framework boundaries; the Node orchestrator ([src/cli.ts](src/cli.ts)) drives them in pipeline order. Every arrow between stages is a JSON contract, so any stage can be swapped independently.
