@@ -8,6 +8,7 @@ import { extractPdfWithPdfjs } from './pipeline/extract-pdfjs.js'
 import { renderPdf } from './pipeline/render.js'
 import { renderPdfWithJs } from './pipeline/render-js.js'
 import { blocksFromStructure } from './pipeline/structure-blocks.js'
+import { recognizeStructureWithTesseract } from './pipeline/structure-tesseract.js'
 import { AppleTranslator } from './translator/apple-translator.js'
 import { LlmTranslator } from './translator/llm-translator.js'
 import { maskProtectedSpans, restoreProtectedSpans } from './pipeline/protect.js'
@@ -27,6 +28,8 @@ interface CliOptions {
   extractor: 'apple' | 'pdfjs'
   renderer: 'swift' | 'js'
   fontPath?: string
+  ocr: 'vision' | 'tesseract'
+  tessdataPath?: string
 }
 
 /** `--pages`로 지정한 1-based 페이지 범위(양끝 포함). */
@@ -63,6 +66,8 @@ function parseArgs(argv: readonly string[]): CliOptions {
   let extractor = 'apple'
   let renderer = 'swift'
   let fontPath: string | undefined
+  let ocr = 'vision'
+  let tessdataPath: string | undefined
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
@@ -88,6 +93,12 @@ function parseArgs(argv: readonly string[]): CliOptions {
         break
       case '--font':
         fontPath = argv[++i]
+        break
+      case '--ocr':
+        ocr = argv[++i] ?? ocr
+        break
+      case '--tessdata':
+        tessdataPath = argv[++i]
         break
       case '--source':
         sourceLanguage = argv[++i] ?? sourceLanguage
@@ -137,6 +148,11 @@ function parseArgs(argv: readonly string[]): CliOptions {
     process.exit(1)
   }
 
+  if (ocr !== 'vision' && ocr !== 'tesseract') {
+    console.error(`unknown ocr: ${ocr} (expected vision or tesseract)`)
+    process.exit(1)
+  }
+
   return {
     inputPath,
     outputPath: resolvedOutput,
@@ -148,6 +164,8 @@ function parseArgs(argv: readonly string[]): CliOptions {
     extractor,
     renderer,
     fontPath,
+    ocr,
+    tessdataPath,
   }
 }
 
@@ -204,6 +222,15 @@ interface BuildBlocksResult {
   usedOcr: boolean
 }
 
+/** 1-based 페이지 범위를 0-based 인덱스 배열로 편다 (tesseract에 인식 대상 페이지만 넘길 때). */
+function rangeToIndices({ first, last }: PageRange): number[] {
+  const indices: number[] = []
+  for (let page = first; page <= last; page++) {
+    indices.push(page - 1)
+  }
+  return indices
+}
+
 /**
  * 입력 PDF를 블록 배열로 만든다. 텍스트 레이어가 있으면 PDFKit 추출 → 기하 조립 → (표가
  * 있으면) Vision 셀 구조 결합의 경로를, 없으면 Vision 문서 구조 인식(스캔 경로)을 탄다.
@@ -238,8 +265,22 @@ async function buildBlocks(options: CliOptions, ocrLanguages: string[]): Promise
     return { blocks, usedOcr: false }
   }
 
-  console.log('No text layer found — running document structure recognition')
-  const structure = await readStructure(options.inputPath, ocrLanguages)
+  const pageIndices =
+    options.pageRange !== undefined
+      ? rangeToIndices(options.pageRange)
+      : undefined
+  console.log(
+    `No text layer found — running document structure recognition` +
+      (options.ocr === 'tesseract' ? ' via tesseract.js' : '')
+  )
+  const structure =
+    options.ocr === 'tesseract'
+      ? await recognizeStructureWithTesseract(options.inputPath, {
+          languages: [options.sourceLanguage, options.targetLanguage],
+          pageIndices,
+          tessdataPath: options.tessdataPath,
+        })
+      : await readStructure(options.inputPath, ocrLanguages)
   let structuredPages = structure.pages
   if (options.pageRange !== undefined) {
     const { first, last } = options.pageRange
@@ -267,7 +308,7 @@ function printUsage(): void {
   console.log(
     `usage: pdf-translator <input.pdf> [-o output.pdf] [--source en] [--target ko] ` +
       `[--pages N[-M]] [--glossary terms.json] [--engine apple|gemini] [--extractor apple|pdfjs] ` +
-      `[--renderer swift|js] [--font path.otf]`
+      `[--renderer swift|js] [--font path.otf] [--ocr vision|tesseract] [--tessdata dir]`
   )
 }
 
