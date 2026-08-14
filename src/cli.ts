@@ -6,6 +6,7 @@ import { attachTableStructure, tablePageIndices } from './pipeline/enrich-tables
 import { extractPdf, readPdfInfo, readStructure } from './pipeline/ingest.js'
 import { extractPdfWithPdfjs } from './pipeline/extract-pdfjs.js'
 import { renderPdf } from './pipeline/render.js'
+import { renderPdfWithJs } from './pipeline/render-js.js'
 import { blocksFromStructure } from './pipeline/structure-blocks.js'
 import { AppleTranslator } from './translator/apple-translator.js'
 import { LlmTranslator } from './translator/llm-translator.js'
@@ -24,6 +25,8 @@ interface CliOptions {
   glossary: Glossary
   engine: 'apple' | 'gemini'
   extractor: 'apple' | 'pdfjs'
+  renderer: 'swift' | 'js'
+  fontPath?: string
 }
 
 /** `--pages`로 지정한 1-based 페이지 범위(양끝 포함). */
@@ -58,6 +61,8 @@ function parseArgs(argv: readonly string[]): CliOptions {
   let glossaryPath: string | undefined
   let engine = 'apple'
   let extractor = 'apple'
+  let renderer = 'swift'
+  let fontPath: string | undefined
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]
@@ -77,6 +82,12 @@ function parseArgs(argv: readonly string[]): CliOptions {
         break
       case '--extractor':
         extractor = argv[++i] ?? extractor
+        break
+      case '--renderer':
+        renderer = argv[++i] ?? renderer
+        break
+      case '--font':
+        fontPath = argv[++i]
         break
       case '--source':
         sourceLanguage = argv[++i] ?? sourceLanguage
@@ -121,6 +132,11 @@ function parseArgs(argv: readonly string[]): CliOptions {
     process.exit(1)
   }
 
+  if (renderer !== 'swift' && renderer !== 'js') {
+    console.error(`unknown renderer: ${renderer} (expected swift or js)`)
+    process.exit(1)
+  }
+
   return {
     inputPath,
     outputPath: resolvedOutput,
@@ -130,6 +146,8 @@ function parseArgs(argv: readonly string[]): CliOptions {
     glossary: loadGlossary(glossaryPath),
     engine,
     extractor,
+    renderer,
+    fontPath,
   }
 }
 
@@ -248,7 +266,8 @@ function toVisionLanguage(language: string): string {
 function printUsage(): void {
   console.log(
     `usage: pdf-translator <input.pdf> [-o output.pdf] [--source en] [--target ko] ` +
-      `[--pages N[-M]] [--glossary terms.json] [--engine apple|gemini] [--extractor apple|pdfjs]`
+      `[--pages N[-M]] [--glossary terms.json] [--engine apple|gemini] [--extractor apple|pdfjs] ` +
+      `[--renderer swift|js] [--font path.otf]`
   )
 }
 
@@ -354,8 +373,14 @@ async function main(): Promise<void> {
     }
   })
 
-  const rendered = await renderPdf(translatedBlocks, options.outputPath)
-  console.log(`Wrote ${rendered.output} (${rendered.pageCount} page(s))`)
+  const rendered =
+    options.renderer === 'js'
+      ? await renderPdfWithJs(translatedBlocks, options.outputPath, { fontPath: options.fontPath })
+      : await renderPdf(translatedBlocks, options.outputPath)
+  console.log(
+    `Wrote ${rendered.output} (${rendered.pageCount} page(s))` +
+      (options.renderer === 'js' ? ' via pdf-lib' : '')
+  )
 }
 
 main().catch((error: unknown) => {
