@@ -57,7 +57,7 @@ llm-translator가 아직 라이브 API로 검증되지 않은 상태라, 붙일 
 VLM은 읽기순서를 태생적으로 잘 잡는다. 다만 이건 **오프라인·no-API-key 설계 기둥과 정면충돌**하므로
 지금 도입할 것은 아니다. "언젠가 클라우드 모드를 추가한다면 structure 스테이지의 대체 백엔드로"
 정도의 메모. 파이프라인이 이미 JSON 계약으로 스테이지를 교체하게 되어 있어 seam은 이미 있다.
-관련 파일: `src/pipeline/structure-blocks.ts`, `swift/pdf-cli/Sources/pdf-cli/Structure.swift`
+관련 파일: `src/pipeline/structure-blocks.ts`, swiftx의 `swift/pdf/Sources/pdf-cli/Structure.swift`
 
 ## 참고하지 않아도 되는 것들
 

@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { extractTextItems, getDocumentProxy, type StructuredTextItem } from 'unpdf'
-import type { ExtractedLine, ExtractedPage, IngestResult } from './ingest.types.js'
+import type { ExtractedLine, ExtractedPage, ExtractResult } from '@cbcruk/pdf-cli'
 
 /**
  * 같은 줄로 묶을 baseline(y) 허용 오차를 폰트 크기 대비 비율로 정한다. 이 비율을 넘게
@@ -10,14 +10,14 @@ const LINE_Y_TOLERANCE_RATIO = 0.5
 
 /**
  * unpdf(PDF.js) 기반 텍스트 레이어 추출기. `pdf-cli extract`(Swift/PDFKit)의 대체 백엔드로,
- * 같은 {@link IngestResult} 계약을 만족하도록 PDF.js 텍스트 항목을 줄 단위로 재조립한다.
+ * 같은 {@link ExtractResult} 계약을 만족하도록 PDF.js 텍스트 항목을 줄 단위로 재조립한다.
  * Swift 툴체인 없이 모든 JS 런타임에서 도는 크로스플랫폼 추출 경로를 실험하기 위한 스파이크다.
  *
  * 한계: PDF.js/unpdf는 폰트 굵기를 노출하지 않아(fontFamily가 "sans-serif"류 제네릭으로
  * 뭉개짐) `bold`는 항상 false다. 큰 폰트 기반 헤딩 감지는 유지되지만, 본문 크기의 볼드-only
  * 헤딩은 놓친다. OCR·표 구조·페이지 크기 외 레이아웃은 제공하지 않는다.
  */
-export async function extractPdfWithPdfjs(inputPath: string): Promise<IngestResult> {
+export async function extractPdfWithPdfjs(inputPath: string): Promise<ExtractResult> {
   const data = new Uint8Array(readFileSync(inputPath))
   // getDocumentProxy로 한 번만 파싱하고, extractTextItems가 이 프록시를 재사용한다
   // (withDocument가 isPDFDocumentProxy로 판별해 재파싱하지 않음).

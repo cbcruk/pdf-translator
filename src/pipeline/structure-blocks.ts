@@ -1,10 +1,12 @@
 import type { Block } from './assemble.types.js'
-import type { StructuredPage, StructuredTable } from './ingest.types.js'
+import type { StructuredBox, StructuredPage, StructuredTable } from '@cbcruk/pdf-cli'
 
 /** 단독 페이지 번호 판정 패턴 (머리글/바닥글 제거용). */
 const PAGE_NUMBER_PATTERN = /^\s*(page\s+)?\d+(\s+of\s+\d+)?\s*$/i
 /** 한 줄 문단의 줄 높이가 중앙값의 이 배수를 넘으면 헤딩으로 본다. */
 const HEADING_HEIGHT_SCALE = 1.3
+/** 문단 면적의 이 비율 이상이 표 안에 들어가면 표 셀이 문단으로 중복된 것으로 본다. */
+const TABLE_CONTAINMENT = 0.5
 
 /** 페이지 내 요소를 세로 위치로 정렬하기 위한 임시 래퍼 (top = 요소 상단 y). */
 interface OrderedElement {
@@ -32,6 +34,9 @@ export function blocksFromStructure(pages: readonly StructuredPage[]): Block[] {
     for (const paragraph of page.paragraphs) {
       const text = paragraph.text.replace(/\s*\n\s*/g, ' ').trim()
       if (text.length === 0 || isFurniture(text, paragraph.box.y, page.height)) {
+        continue
+      }
+      if (isInsideTable(paragraph.box, page.tables)) {
         continue
       }
       const lineHeight = paragraph.box.height / Math.max(paragraph.lineCount, 1)
@@ -79,6 +84,25 @@ function tableBlock(table: StructuredTable): Block {
     text: table.rows.map((row) => row.join(' ')).join('\n'),
     rows: table.rows,
   }
+}
+
+/**
+ * 문단이 표 안에 들어 있는지. Vision은 표 셀 텍스트를 `tables`와 `paragraphs`에 모두
+ * 담아 주므로, 걸러내지 않으면 같은 내용이 표로 한 번, 문단으로 또 한 번 번역·렌더된다.
+ */
+function isInsideTable(box: StructuredBox, tables: readonly StructuredTable[]): boolean {
+  const area = box.width * box.height
+  if (area <= 0) {
+    return false
+  }
+  return tables.some((table) => intersectionArea(box, table.box) / area >= TABLE_CONTAINMENT)
+}
+
+/** 두 상자가 겹치는 면적. 겹치지 않으면 0. */
+function intersectionArea(a: StructuredBox, b: StructuredBox): number {
+  const width = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x)
+  const height = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y)
+  return Math.max(0, width) * Math.max(0, height)
 }
 
 /** 페이지 상·하단 12% 영역에 놓인 단독 페이지 번호인지 (걷어낼 머리글/바닥글). */

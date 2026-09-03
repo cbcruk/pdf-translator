@@ -15,14 +15,13 @@ PDF ─ has text layer ─▶ extract (PDFKit: lines + bbox + font)
 ## Requirements
 
 - **macOS 26.0+** — uses the direct `TranslationSession(installedSource:target:)` entry point and `RecognizeDocumentsRequest`
-- Node 18+, pnpm, Swift toolchain (Xcode Command Line Tools)
-- Translation language packs preinstalled: System Settings > General > Language & Region > Translation Languages (exits with code 2 and instructions if missing)
+- Node 18+, pnpm. **No Swift toolchain** — the `pdf-cli` and `translate-cli` binaries arrive prebuilt (universal, arm64 + x86_64) inside the [swiftx](https://github.com/cbcruk/swiftx) packages
+- Translation language packs preinstalled: System Settings > General > Language & Region > Translation Languages (the run stops with install instructions if missing)
 
 ## Build & Usage
 
 ```sh
-pnpm install
-pnpm build:swift   # translate-cli, pdf-cli (release)
+pnpm install       # includes the prebuilt Swift CLIs from swiftx
 pnpm build         # TypeScript → dist/
 
 node dist/cli.js input.pdf
@@ -43,11 +42,11 @@ node dist/cli.js input.pdf
 
 ## Cross-platform path (no macOS)
 
-The default pipeline uses Apple frameworks (PDFKit, Vision, TranslationSession, Core Graphics) and needs macOS 26.0+. Each of those stages also has a pure-JS backend, so the four flags below let the tool run on Linux, Windows, or serverless — no Swift toolchain, no `pnpm build:swift`.
+The default pipeline uses Apple frameworks (PDFKit, Vision, TranslationSession, Core Graphics) and needs macOS 26.0+. Each of those stages also has a pure-JS backend, so the four flags below let the tool run on Linux, Windows, or serverless. The swiftx packages still install there — their bundled binaries are macOS-only, but nothing spawns them unless an Apple backend is selected.
 
 ```sh
 pnpm install
-pnpm build          # TypeScript → dist/  (skip pnpm build:swift)
+pnpm build          # TypeScript → dist/
 ```
 
 **Text-layer PDF** (has selectable text) — extract with PDF.js (`pdfjs`), translate with Gemini, render with pdf-lib (`js`):
@@ -85,7 +84,7 @@ Verification status: the extract (`pdfjs`) and render (`js`) backends are measur
 
 ## Layout
 
-Two Swift CLIs sit at the Apple framework boundaries; the Node orchestrator ([src/cli.ts](src/cli.ts)) drives them in pipeline order. Every arrow between stages is a JSON contract, so any stage can be swapped independently.
+Two Swift CLIs sit at the Apple framework boundaries, installed as prebuilt binaries from [swiftx](https://github.com/cbcruk/swiftx) (`@cbcruk/pdf-cli`, `@cbcruk/translate-cli`); the Node orchestrator ([src/cli.ts](src/cli.ts)) drives them in pipeline order. Every arrow between stages is a JSON contract, so any stage can be swapped independently.
 
 | Stage | Module | Role |
 |---|---|---|
@@ -96,9 +95,9 @@ Two Swift CLIs sit at the Apple framework boundaries; the Node orchestrator ([sr
 | Enrich tables | [enrich-tables.ts](src/pipeline/enrich-tables.ts) + `pdf-cli structure` (Swift) | attach Vision cell structure to geometry-detected tables (table pages only) |
 | Protect | [protect.ts](src/pipeline/protect.ts) | mask URLs/emails/glossary terms as `⟦U0⟧` tokens; restore after translation |
 | Translate | [apple-translator.ts](src/translator/apple-translator.ts) \| [llm-translator.ts](src/translator/llm-translator.ts) | engine seam ([translator.types.ts](src/translator/translator.types.ts)): `translate-cli` (Swift) on-device \| Gemini API |
-| Render | [render.ts](src/pipeline/render.ts) → `pdf-cli render` (Swift) — or [render-js.ts](src/pipeline/render-js.ts) via `--renderer js` | block-by-block layout, table grids, pagination |
+| Render | `pdf-cli render` (Swift) — or [render-js.ts](src/pipeline/render-js.ts) via `--renderer js` | block-by-block layout, table grids, pagination |
 
-Shell-out plumbing lives in [ingest.ts](src/pipeline/ingest.ts) and [src/utils/](src/utils/).
+Shell-out plumbing — process spawn, JSON parsing, binary lookup, exit-code errors — lives in `@cbcruk/swift-bridge`, not here. Failures surface as `SwiftCliError` with the CLI's exit code.
 
 ## How it works
 
@@ -115,6 +114,7 @@ Shell-out plumbing lives in [ingest.ts](src/pipeline/ingest.ts) and [src/utils/]
 ## Design notes (deviations from the spec, with measurements)
 
 - **No SwiftUI hosting needed**: the design's biggest unknown (TranslationSession's SwiftUI coupling) is resolved by macOS 26.0+'s `init(installedSource:target:)`. The language-pack download UI is still SwiftUI-only, so packs must be preinstalled
+- **Swift CLIs moved out to swiftx**: `pdf-cli` and `translate-cli` used to live in this repo's `swift/` directory and were built locally with `pnpm build:swift`. They now come from [swiftx](https://github.com/cbcruk/swiftx) as prebuilt universal binaries inside npm-shaped tarballs, so this repo no longer needs a Swift toolchain. The JSON contract is unchanged — the same 23-page fixture renders byte-identical text before and after the move
 - **OCR via pdf-cli subcommand instead of node-swift in-process binding**: assembly is geometry-based and needs per-line bboxes, which the existing `vision-ocr` module doesn't provide (it returns a flat transcript). The JSON contract is the seam, so switching back is cheap
 - **Parallelism doesn't help on-device, but it does over the API**: running 2–3 translate-cli processes concurrently takes exactly as long as one — Apple's on-device translation is serialized at the system daemon level (~1.5s per paragraph ceiling). The Gemini path has no such serialization, so it runs batches concurrently — the real throughput fix
 - **Render fonts**: Helvetica Neue with an Apple SD Gothic Neo cascade. Drawing Latin with SD Gothic alone loses doubled letters (`ll` → `l`) on extraction round-trips, and `NSFont.systemFont` embeds private font names that fall back to Times in other viewers

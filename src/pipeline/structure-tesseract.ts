@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import Tesseract from 'tesseract.js'
 import { getDocumentProxy, renderPageAsImage } from 'unpdf'
-import type { StructureResult, StructuredBox, StructuredPage } from './ingest.types.js'
+import type { StructureResult, StructuredBox, StructuredPage } from '@cbcruk/pdf-cli'
 
 /** 페이지를 래스터화할 배율. Vision 경로와 맞춰 3x(작은 글자 인식률). */
 const DEFAULT_SCALE = 3

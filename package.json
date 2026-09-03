@@ -9,7 +9,6 @@
   },
   "scripts": {
     "build": "tsc",
-    "build:swift": "swift build -c release --package-path swift/translate-cli && swift build -c release --package-path swift/pdf-cli",
     "typecheck": "tsc --noEmit",
     "test": "tsc && node --test test/*.test.mjs"
   },
@@ -21,10 +20,18 @@
     "typescript": "^7.0.2"
   },
   "dependencies": {
+    "@cbcruk/pdf-cli": "https://github.com/cbcruk/swiftx/releases/download/2026.09.03/cbcruk-pdf-cli-0.1.0.tgz",
+    "@cbcruk/swift-bridge": "https://github.com/cbcruk/swiftx/releases/download/2026.09.03/cbcruk-swift-bridge-0.1.0.tgz",
+    "@cbcruk/translate-cli": "https://github.com/cbcruk/swiftx/releases/download/2026.09.03/cbcruk-translate-cli-0.1.0.tgz",
     "@napi-rs/canvas": "^1.0.6",
     "@pdf-lib/fontkit": "^1.1.1",
     "pdf-lib": "^1.17.1",
     "tesseract.js": "^7.0.0",
     "unpdf": "^1.8.1"
+  },
+  "pnpm": {
+    "overrides": {
+      "@cbcruk/swift-bridge": "https://github.com/cbcruk/swiftx/releases/download/2026.09.03/cbcruk-swift-bridge-0.1.0.tgz"
+    }
   }
 }
