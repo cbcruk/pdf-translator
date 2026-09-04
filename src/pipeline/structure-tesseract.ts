@@ -133,8 +133,18 @@ function toTesseractLanguage(language: string): string {
   return TESSERACT_LANGUAGES[language] ?? language
 }
 
-/** traineddata 디렉터리를 옵션 → env → 후보 경로 순으로 해석한다. 없으면 안내와 함께 던진다. */
+/**
+ * traineddata 디렉터리를 옵션 → env → 후보 경로 순으로 해석한다. 없으면 안내와 함께 던진다.
+ *
+ * `--tessdata`로 경로를 **명시**했는데 그 경로가 없으면 거기서 멈춘다. 시스템에 설치된
+ * tesseract의 디렉터리로 조용히 넘어가면, 사용자가 고른 것과 다른 traineddata로 인식하고도
+ * 그 사실이 드러나지 않는다.
+ */
 function resolveTessdata(explicit: string | undefined): string {
+  if (explicit !== undefined && explicit.length > 0 && !existsSync(explicit)) {
+    throw new Error(`--tessdata directory not found: ${explicit} (expected <lang>.traineddata inside)`)
+  }
+
   const fromEnv = process.env['PDF_TRANSLATOR_TESSDATA']
   for (const candidate of [explicit, fromEnv, ...TESSDATA_CANDIDATES]) {
     if (candidate !== undefined && candidate.length > 0 && existsSync(candidate)) {
