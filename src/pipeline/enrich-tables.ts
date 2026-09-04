@@ -1,5 +1,5 @@
 import type { Block, BlockSource } from './assemble.types.js'
-import type { StructureResult, StructuredBox } from './ingest.types.js'
+import type { StructureResult, StructuredBox } from '@cbcruk/pdf-cli'
 
 /**
  * 기하 감지로 위치를 잡은 표 블록에 Vision이 인식한 셀 구조(rows)를 입힌다.

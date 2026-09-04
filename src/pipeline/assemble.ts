@@ -1,4 +1,4 @@
-import type { ExtractedLine, ExtractedPage } from './ingest.types.js'
+import type { ExtractedLine, ExtractedPage } from '@cbcruk/pdf-cli'
 import type { Block } from './assemble.types.js'
 import {
   commonLeftEdges,

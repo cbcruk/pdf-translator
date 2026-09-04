@@ -2,7 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import fontkit from '@pdf-lib/fontkit'
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib'
 import type { Block } from './assemble.types.js'
-import type { RenderResult } from './render.js'
+import type { RenderResult } from '@cbcruk/pdf-cli'
 
 // Swift(Core Graphics) 렌더러의 지표를 그대로 옮긴다 — Letter 612×792, 64pt 여백.
 const PAGE_WIDTH = 612

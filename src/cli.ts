@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
+import { extractPdf, readPdfInfo, readStructure, renderPdf } from '@cbcruk/pdf-cli'
 import { assembleBlocks } from './pipeline/assemble.js'
 import { attachTableStructure, tablePageIndices } from './pipeline/enrich-tables.js'
-import { extractPdf, readPdfInfo, readStructure } from './pipeline/ingest.js'
 import { extractPdfWithPdfjs } from './pipeline/extract-pdfjs.js'
-import { renderPdf } from './pipeline/render.js'
 import { renderPdfWithJs } from './pipeline/render-js.js'
 import { blocksFromStructure } from './pipeline/structure-blocks.js'
 import { recognizeStructureWithTesseract } from './pipeline/structure-tesseract.js'
@@ -258,7 +257,10 @@ async function buildBlocks(options: CliOptions, ocrLanguages: string[]): Promise
     const tablePages = tablePageIndices(blocks)
     if (tablePages.length > 0) {
       console.log(`Detecting table structure on ${tablePages.length} page(s)`)
-      const structure = await readStructure(options.inputPath, ocrLanguages, tablePages)
+      const structure = await readStructure(options.inputPath, {
+        languages: ocrLanguages,
+        pages: tablePages,
+      })
       const matched = attachTableStructure(blocks, structure)
       console.log(`Matched cell structure for ${matched} table(s)`)
     }
@@ -280,7 +282,7 @@ async function buildBlocks(options: CliOptions, ocrLanguages: string[]): Promise
           pageIndices,
           tessdataPath: options.tessdataPath,
         })
-      : await readStructure(options.inputPath, ocrLanguages)
+      : await readStructure(options.inputPath, { languages: ocrLanguages })
   let structuredPages = structure.pages
   if (options.pageRange !== undefined) {
     const { first, last } = options.pageRange

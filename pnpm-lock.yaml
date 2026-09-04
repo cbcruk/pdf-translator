@@ -4,10 +4,22 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  '@cbcruk/swift-bridge': https://github.com/cbcruk/swiftx/releases/download/2026.09.03/cbcruk-swift-bridge-0.1.0.tgz
+
 importers:
 
   .:
     dependencies:
+      '@cbcruk/pdf-cli':
+        specifier: https://github.com/cbcruk/swiftx/releases/download/2026.09.03/cbcruk-pdf-cli-0.1.0.tgz
+        version: https://github.com/cbcruk/swiftx/releases/download/2026.09.03/cbcruk-pdf-cli-0.1.0.tgz
+      '@cbcruk/swift-bridge':
+        specifier: https://github.com/cbcruk/swiftx/releases/download/2026.09.03/cbcruk-swift-bridge-0.1.0.tgz
+        version: https://github.com/cbcruk/swiftx/releases/download/2026.09.03/cbcruk-swift-bridge-0.1.0.tgz
+      '@cbcruk/translate-cli':
+        specifier: https://github.com/cbcruk/swiftx/releases/download/2026.09.03/cbcruk-translate-cli-0.1.0.tgz
+        version: https://github.com/cbcruk/swiftx/releases/download/2026.09.03/cbcruk-translate-cli-0.1.0.tgz
       '@napi-rs/canvas':
         specifier: ^1.0.6
         version: 1.0.6
@@ -32,6 +44,25 @@ importers:
         version: 7.0.2
 
 packages:
+
+  '@cbcruk/pdf-cli@https://github.com/cbcruk/swiftx/releases/download/2026.09.03/cbcruk-pdf-cli-0.1.0.tgz':
+    resolution: {tarball: https://github.com/cbcruk/swiftx/releases/download/2026.09.03/cbcruk-pdf-cli-0.1.0.tgz}
+    version: 0.1.0
+    engines: {node: '>=18'}
+    os: [darwin]
+    hasBin: true
+
+  '@cbcruk/swift-bridge@https://github.com/cbcruk/swiftx/releases/download/2026.09.03/cbcruk-swift-bridge-0.1.0.tgz':
+    resolution: {tarball: https://github.com/cbcruk/swiftx/releases/download/2026.09.03/cbcruk-swift-bridge-0.1.0.tgz}
+    version: 0.1.0
+    engines: {node: '>=18'}
+
+  '@cbcruk/translate-cli@https://github.com/cbcruk/swiftx/releases/download/2026.09.03/cbcruk-translate-cli-0.1.0.tgz':
+    resolution: {tarball: https://github.com/cbcruk/swiftx/releases/download/2026.09.03/cbcruk-translate-cli-0.1.0.tgz}
+    version: 0.1.0
+    engines: {node: '>=18'}
+    os: [darwin]
+    hasBin: true
 
   '@napi-rs/canvas-android-arm64@1.0.6':
     resolution: {integrity: sha512-CZUmZEyN/cmSN1OhRJ44vBE6xyb5ekBbsIF8dqNgizbnAiHSFNi8eAA4oyyIAe5KzJ72K16OKC2lAynZLhv32Q==}
@@ -313,6 +344,16 @@ packages:
     resolution: {integrity: sha512-+J9RrgTKOmlxFSDHo0pI1xM6BLVUv+o0ZT9ANtCxGkjIVCCUdx9alUF8Gm+dGLKbkkkidWIHFDZHDMpfITt4+w==}
 
 snapshots:
+
+  '@cbcruk/pdf-cli@https://github.com/cbcruk/swiftx/releases/download/2026.09.03/cbcruk-pdf-cli-0.1.0.tgz':
+    dependencies:
+      '@cbcruk/swift-bridge': https://github.com/cbcruk/swiftx/releases/download/2026.09.03/cbcruk-swift-bridge-0.1.0.tgz
+
+  '@cbcruk/swift-bridge@https://github.com/cbcruk/swiftx/releases/download/2026.09.03/cbcruk-swift-bridge-0.1.0.tgz': {}
+
+  '@cbcruk/translate-cli@https://github.com/cbcruk/swiftx/releases/download/2026.09.03/cbcruk-translate-cli-0.1.0.tgz':
+    dependencies:
+      '@cbcruk/swift-bridge': https://github.com/cbcruk/swiftx/releases/download/2026.09.03/cbcruk-swift-bridge-0.1.0.tgz
 
   '@napi-rs/canvas-android-arm64@1.0.6':
     optional: true

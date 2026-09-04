@@ -1,4 +1,4 @@
-import type { ExtractedLine, ExtractedPage } from './ingest.types.js'
+import type { ExtractedLine, ExtractedPage } from '@cbcruk/pdf-cli'
 
 /** 머리글/바닥글로 취급하는 페이지 상·하단 영역의 비율 (페이지 높이의 12%). */
 const FURNITURE_ZONE_RATIO = 0.12
