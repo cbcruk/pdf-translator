@@ -4,9 +4,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-overrides:
-  '@cbcruk/swift-bridge': https://github.com/cbcruk/swiftx/releases/download/2026.09.03/cbcruk-swift-bridge-0.1.0.tgz
-
 importers:
 
   .:
@@ -15,8 +12,8 @@ importers:
         specifier: https://github.com/cbcruk/swiftx/releases/download/2026.09.03/cbcruk-pdf-cli-0.1.0.tgz
         version: https://github.com/cbcruk/swiftx/releases/download/2026.09.03/cbcruk-pdf-cli-0.1.0.tgz
       '@cbcruk/swift-bridge':
-        specifier: https://github.com/cbcruk/swiftx/releases/download/2026.09.03/cbcruk-swift-bridge-0.1.0.tgz
-        version: https://github.com/cbcruk/swiftx/releases/download/2026.09.03/cbcruk-swift-bridge-0.1.0.tgz
+        specifier: ^0.1.0
+        version: 0.1.0
       '@cbcruk/translate-cli':
         specifier: https://github.com/cbcruk/swiftx/releases/download/2026.09.03/cbcruk-translate-cli-0.1.0.tgz
         version: https://github.com/cbcruk/swiftx/releases/download/2026.09.03/cbcruk-translate-cli-0.1.0.tgz
@@ -52,9 +49,8 @@ packages:
     os: [darwin]
     hasBin: true
 
-  '@cbcruk/swift-bridge@https://github.com/cbcruk/swiftx/releases/download/2026.09.03/cbcruk-swift-bridge-0.1.0.tgz':
-    resolution: {tarball: https://github.com/cbcruk/swiftx/releases/download/2026.09.03/cbcruk-swift-bridge-0.1.0.tgz}
-    version: 0.1.0
+  '@cbcruk/swift-bridge@0.1.0':
+    resolution: {integrity: sha512-sdXHzQbQcFjrO64SkT1Yb2DtVwDk9TZu98otj+aZdW1Ahryzm3aUwAQDqpzy5mJa0HAJG+zx2Wd7c37XpE/1KA==}
     engines: {node: '>=18'}
 
   '@cbcruk/translate-cli@https://github.com/cbcruk/swiftx/releases/download/2026.09.03/cbcruk-translate-cli-0.1.0.tgz':
@@ -347,13 +343,13 @@ snapshots:
 
   '@cbcruk/pdf-cli@https://github.com/cbcruk/swiftx/releases/download/2026.09.03/cbcruk-pdf-cli-0.1.0.tgz':
     dependencies:
-      '@cbcruk/swift-bridge': https://github.com/cbcruk/swiftx/releases/download/2026.09.03/cbcruk-swift-bridge-0.1.0.tgz
+      '@cbcruk/swift-bridge': 0.1.0
 
-  '@cbcruk/swift-bridge@https://github.com/cbcruk/swiftx/releases/download/2026.09.03/cbcruk-swift-bridge-0.1.0.tgz': {}
+  '@cbcruk/swift-bridge@0.1.0': {}
 
   '@cbcruk/translate-cli@https://github.com/cbcruk/swiftx/releases/download/2026.09.03/cbcruk-translate-cli-0.1.0.tgz':
     dependencies:
-      '@cbcruk/swift-bridge': https://github.com/cbcruk/swiftx/releases/download/2026.09.03/cbcruk-swift-bridge-0.1.0.tgz
+      '@cbcruk/swift-bridge': 0.1.0
 
   '@napi-rs/canvas-android-arm64@1.0.6':
     optional: true
